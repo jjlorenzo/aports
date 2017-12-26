@@ -1,0 +1,138 @@
+# Contributor: Jose Jorge Lorenzo Vila <jjlorenzo@gmail.com>
+# Maintainer: Nathan Johnson <nathan@nathanjohnson.info>
+
+pkgname=rabbitmq-server
+
+pkgver=3.7.2
+
+pkgrel=0
+
+pkgdesc="RabbitMQ is an open source multi-protocol messaging broker."
+
+url="http://www.rabbitmq.com/"
+
+arch="noarch"
+
+license="MPL 1.1"
+
+depends="
+	erlang
+	erlang-asn1
+	erlang-crypto
+	erlang-eldap
+	erlang-inets
+	erlang-mnesia
+	erlang-os-mon
+	erlang-parsetools
+	erlang-public-key
+	erlang-runtime-tools
+	erlang-sasl
+	erlang-ssl
+	erlang-stdlib
+	erlang-syntax-tools
+	erlang-tools
+	erlang-xmerl
+	logrotate
+"
+
+# Run-time dependency package(s) for the $pkgname-dev subpackage.
+depends_dev=""
+
+# Build-time dependency package(s).
+makedepends="
+	$depends_dev
+	elixir
+	erlang-compiler
+	erlang-dev
+	erlang-edoc
+	erlang-erl-docgen
+	gawk
+	grep
+	libxslt
+	py2-simplejson
+	python2
+	rsync
+	socat
+	xmlto
+	zip
+"
+
+install="
+	$pkgname.post-deinstall
+	$pkgname.pre-install
+"
+
+pkgusers="rabbitmq"
+
+pkggroups="rabbitmq"
+
+subpackages="
+	$pkgname-doc
+"
+
+source="
+	rabbitmq-server.initd
+	rabbitmq-server.logrotate
+	https://github.com/rabbitmq/${pkgname}/releases/download/v${pkgver}/${pkgname}-${pkgver}.tar.xz
+"
+
+builddir="$srcdir/${pkgname}-${pkgver}"
+
+build() {
+	cd "$builddir"
+	make dist manpages
+}
+
+package() {
+	cd "$builddir"
+
+	make install install-bin install-man DESTDIR="$pkgdir" PREFIX=/usr \
+	RMQ_ROOTDIR="/usr/lib/rabbitmq" MANDIR=/usr/share/man
+
+	mkdir -p "$pkgdir"/var/lib/rabbitmq/mnesia
+	mkdir -p "$pkgdir"/var/log/rabbitmq
+
+	#Copy all necessary lib files etc.
+	install -p -m755 -D "$builddir"/scripts/rabbitmq-server.ocf \
+	"$pkgdir"/usr/lib/ocf/resource.d/rabbitmq/rabbitmq-server || return 1
+	install -p -m755 -D "$builddir"/scripts/rabbitmq-server-ha.ocf \
+	"$pkgdir"/usr/lib/ocf/resource.d/rabbitmq/rabbitmq-server-ha \
+	|| return 1
+	install -p -m644 -D "$srcdir/"$pkgname.logrotate \
+	"$pkgdir"/etc/logrotate.d/rabbitmq-server || return 1
+	install -m755 -D "$srcdir"/$pkgname.initd \
+	"$pkgdir"/etc/init.d/$pkgname || return 1
+	mkdir -p "$pkgdir"/usr/sbin
+
+	# This is lifted / adapted from the official upstream spec file.
+	# I'd prefer a patch file, but this is probably a little easier
+	# to manage since this is how they do it upstream.  inb4eww
+	sed -e 's|@SU_RABBITMQ_SH_C@|su rabbitmq -s /bin/sh -c|' \
+	-e 's|@STDOUT_STDERR_REDIRECTION@||' \
+	< "$builddir"/scripts/rabbitmq-script-wrapper \
+	> "$pkgdir"/usr/sbin/rabbitmqctl
+
+	chmod 0755 "$pkgdir"/usr/sbin/rabbitmqctl
+	for script in rabbitmq-server rabbitmq-plugins; do
+	cp -a "$pkgdir"/usr/sbin/rabbitmqctl \
+		 "$pkgdir"/usr/sbin/$script;
+	done
+
+	mkdir -p "$pkgdir"/usr/share/doc/"$pkgname"
+	cp -a "$builddir"/LICENSE* "$pkgdir"/usr/share/doc/"$pkgname"/
+	cp -a "$builddir"/deps/rabbit/docs/* "$pkgdir"/usr/share/doc/"$pkgname"/
+	cp -a "$builddir"/deps/rabbitmq_sharding/docs/* "$pkgdir"/usr/share/doc/"$pkgname"/
+	chmod 755 "$pkgdir"/var/lib/rabbitmq
+	chmod 750 "$pkgdir"/var/lib/rabbitmq/mnesia
+	chmod 755 "$pkgdir"/var/log/rabbitmq
+	chown -R $pkgusers:$pkggroups "$pkgdir"/var/lib/rabbitmq
+	chown -R $pkgusers:$pkggroups "$pkgdir"/var/log/rabbitmq
+}
+
+check() {
+	echo ""
+}
+
+sha512sums="a8bb02a7cae1f8720e5c7aaabfe6a2c0e731cffbe0d8f99bdcb6597daa654dc49e6d41943974601435700cf469eaa8286dc91a3255a6b9023754c3861fbb5cd9  rabbitmq-server.initd
+70f7b9b88aa9022e8763d0c10493bc50e2a3222a3c0f85ca45f056db265c41014313bde6d317bbceb35c3ca88fc60fe95ee48c4d450e4f670f69548d371a2a9e  rabbitmq-server.logrotate
+8972efd81c03d5499393ee87000f86373a1e933ce327318122d603ce4e76156f1c8588f3740adccc74c00afa5256ea6a040f1c420bacf3eaec170224259e1c3c  rabbitmq-server-3.7.2.tar.xz"

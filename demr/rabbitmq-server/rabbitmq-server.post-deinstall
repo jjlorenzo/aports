@@ -1,0 +1,6 @@
+#!/bin/sh
+
+deluser --remove-home rabbitmq
+delgroup rabbitmq
+
+exit 0
